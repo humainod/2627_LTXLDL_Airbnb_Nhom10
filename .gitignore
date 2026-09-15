@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# === Dữ liệu thô ( phải bỏ qua) ===
+data/raw/*
+!data/raw/.gitkeep
+
+# === Dữ liệu mẫu (Giữ lại thư mục) ===
+data/samples/*
+!data/samples/.gitkeep
+
+# === Hình vẽ (Giữ lại thư mục) ===
+figures/*
+!figures/.gitkeep
+
+# === Cache LLM ===
+data/processed/llm_cache.jsonl
