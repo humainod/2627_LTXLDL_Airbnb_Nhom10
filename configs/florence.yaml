@@ -1,0 +1,4 @@
+city: florence
+currency: EUR
+data_root: italy/toscana/florence
+snapshot: [2025-09-22, 2025-12-26, 2026-03-27, 2026-06-26]
