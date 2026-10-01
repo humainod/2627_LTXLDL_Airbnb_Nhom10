@@ -1,4 +1,11 @@
 city: florence
+country: italy
+region: toscana
 currency: EUR
 data_root: italy/toscana/florence
-snapshots: [2025-09-22, 2025-12-26, 2026-03-27, 2026-06-26]
+snapshots: ["2025-09-22", "2025-12-26", "2026-03-27", "2026-06-26"]
+url_template: "https://data.insideairbnb.com/{country}/{region}/{city}/{snapshot}/data/{filename}"
+files:
+  - listings.csv.gz
+  - calendar.csv.gz
+  - reviews.csv.gz
