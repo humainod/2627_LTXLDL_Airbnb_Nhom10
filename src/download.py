@@ -43,6 +43,7 @@ def tai_snapshot(config: dict, snapshot: str, raw_dir: Path) -> bool:
         ok = tai_file(url, save_path)
         if not ok:
             tat_ca_ok = False
+    return tat_ca_ok
 
 def tai_file(url: str, save_path: Path) -> bool:
     """
@@ -60,9 +61,7 @@ def tai_file(url: str, save_path: Path) -> bool:
     # Bước 3: Gửi request tải file
     print(f"  [tải] {url}")
     try:
-        # stream=True để không nạp cả file lớn vào RAM
-        # timeout=60 để tránh treo vô hạn nếu server không phản hồi
-        r = requests.get(url, stream=True, timeout=60)
+        r = requests.get(url, timeout=60)
     except requests.exceptions.Timeout:
         print(f"  [LỖI] Hết thời gian chờ (timeout) khi tải: {url}")
         return False
@@ -87,8 +86,7 @@ def tai_file(url: str, save_path: Path) -> bool:
     # Bước 5: Ghi file xuống ổ cứng theo từng phần nhỏ (8 KB)
     try:
         with save_path.open("wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
+                f.write(r.content)
     except OSError as e:
         print(f"  [LỖI] Không ghi được file {save_path}: {e}")
         return False
@@ -101,11 +99,8 @@ def tai_file(url: str, save_path: Path) -> bool:
 
     print(f"  [xong] {save_path.name} ({size_mb:.1f} MB)")
     return True
+    
 
-
-
-
-    return tat_ca_ok
 
 def main():
     # Bước 1: Đọc tham số dòng lệnh
