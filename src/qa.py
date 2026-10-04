@@ -4,7 +4,7 @@ import numpy as np
 
 """
 To do:
-1) Create a data locator using id files(maybe it's better to break it up into different functions)
+1) (Done) Create a data locator using id files(maybe it's better to break it up into different functions)
 2) Create a set of data filter for each QA criterias
     Should be checking for:
     +) Missing values
@@ -16,8 +16,12 @@ To do:
 def findData()->pd.DataFrame:
 
     """
-    Find the necessary data from the table to be used for analysis, using id files\n
-    Then, check if the amount of data is right
+    Find the necessary data from all csv files in raw data to be used for analysis, using id files\n
+    Then, check if the amount of data is right\n 
+    Might not work depend on file directory
+
+    Returns: 
+        pd.DataFrames: Return as a two-dimensional data structure, with each column contains all files from a snapshot 
     """
 
     with open("configs/florence.yaml", "r") as file:
@@ -65,4 +69,6 @@ def findData()->pd.DataFrame:
             print(f"Property with no price: {right_txt if no_notpriced==20 else missing_txt}")
         
     return needed_data
-first_order_processed_data = findData()
+
+def checkMissing()
+
