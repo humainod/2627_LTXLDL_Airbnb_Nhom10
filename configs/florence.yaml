@@ -9,3 +9,7 @@ files:
   - listings.csv.gz
   - calendar.csv.gz
   - reviews.csv.gz
+neccesary_values:
+  kpi:  {"listings": ["price", "estimated_revenue_l365d"], "calendar": [], "reviews": []}
+  llm: {"listings": [], "calendar": [], "reviews": []}
+
