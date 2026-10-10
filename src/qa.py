@@ -19,10 +19,8 @@ def findData()->pd.DataFrame:
 
     """
 
-    root = Path(__file__).resolve().parents[1]
-
-    with open(root / "configs" / "florence.yaml", "r") as file:
-        config = yaml.safe_load(file)
+    root = getRoot()
+    config = loadConfig()
 
     raw_data = pd.DataFrame(
         {date: [pd.read_csv(root / "data/raw/florence" / date / file) for file in config["files"]] for date in config["snapshots"]},
@@ -207,12 +205,13 @@ class dataWashingMachine:
                     flag[col]=flag[col].case_when([(cond(flag[col]), "Non-critical value"), (default, "Clean")])
         else:
             for col in flag:
+                spec_cond = col if col in cond else "def"
                 if col in self.__important_for_kpi[name]:
-                    flag[col]=flag[col].case_when([(cond[col](flag[col]), "Critical KPI value"), (default, "Clean")])
+                    flag[col]=flag[col].case_when([(cond[spec_cond](flag[col]), "Critical KPI value"), (default, "Clean")])
                 elif col in self.__important_for_llm[name]:
-                    flag[col]=flag[col].case_when([(cond[col](flag[col]), "Critical LLM value"), (default, "Clean")])
+                    flag[col]=flag[col].case_when([(cond[spec_cond](flag[col]), "Critical LLM value"), (default, "Clean")])
                 else:
-                    flag[col]=flag[col].case_when([(cond[col](flag[col]), "Non-critical value"), (default, "Clean")])
+                    flag[col]=flag[col].case_when([(cond[spec_cond](flag[col]), "Non-critical value"), (default, "Clean")])
         print("Done flagging")
         return flag
 
@@ -254,7 +253,7 @@ class dataWashingMachine:
 
     def __outlierFlagger(self, name: str, data: pd.DataFrame)->pd.DataFrame:
         """
-        Find outlier data then flag them, detecting by IQR method
+        Find outlier data then flag them, detecting by IQR method and pre-determined threshold set in config 
 
         Parameters
         ----------
@@ -268,8 +267,13 @@ class dataWashingMachine:
             Data Frame
                 A board contains all the flags
         """
-        data = data.drop([col for col in data.columns if (data[col].dtype==object or data[col].dtype==str or data[col].dtype==bool)], axis=1)
-        return self.__baseFlagger(name, data, self.__outlierMark)
+        threshold = loadConfig("force_outlier_threshold")
+        outlier = dict()
+        for item in threshold:
+            outlier[item] = lambda s: self.__outlierMark(s)|(s<threshold[item][0])|(s>threshold[item][1])
+        outlier["def"]= self.__outlierMark
+        data = data.drop([col for col in data.columns if (data[col].dtype==object or data[col].dtype==str or data[col].dtype==bool) or re.findall("id", col)], axis=1)
+        return self.__baseFlagger(name, data, outlier)
 
     def __invalidFormatHandler(self, data: pd.DataFrame)->tuple[pd.DataFrame, int]:
         """
@@ -320,10 +324,11 @@ class dataWashingMachine:
             Pandas boolean series
                 The mask for the input series
         """
+
         first_quar = s[s<=s.median()].median()
         third_quar = s[s>=s.median()].median()
         iqr = third_quar - first_quar
-        return (s<(first_quar-1.5*iqr)) & (s>(third_quar+1.5*iqr))
+        return (s<(first_quar-1.5*iqr)) | (s>(third_quar+1.5*iqr))
 
     def __checkingInvalidDate(self, s: pd.Series):
         original = s.copy()
@@ -339,6 +344,7 @@ class dataWashingMachine:
 
         return parsed, values_changed
 
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>HELPER CLASS & FUNCTION<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 class Report:
     def __init__(self):
@@ -387,17 +393,55 @@ class Report:
         report.at[row, "no._flagged_values"]=report.loc[row, ["total_no._missing_values", "total_no._outlier_values"]].sum()
         return report
 
-data = findData()
+def saveData(container: dataWashingMachine):
+    """
+    Export all clean contents, flags and report as csv files
 
-decontaminater = dataWashingMachine(data)
+    Parameters
+    ----------
+        container: Washing machine
+            The cleaner to export data
 
-decontaminater.cleanData()
+    Notes
+    -----
+    *For clean contents and flags, all files are exported to processed folder*
 
-print("---REPORT---")
-print(decontaminater.report.content)
-print("\n---MISSING-FLAGS---")
-for flag in decontaminater.flags["missing"]:
-    print(decontaminater.flags["missing"][flag])
-print("\n---OUTLIER-FLAGS---")
-for flag in decontaminater.flags["outlier"]:
-    print(decontaminater.flags["outlier"][flag])
+    The directory for each file is (root)/data/processed/(branch)/(date)/(name)
+        -root: The main project folder file
+        -branch: clean for clean data, missing|outlier for each respective contamination type
+        -date: The format is (YYYY)/(MM)/(DD)
+        -name: listings, calendar, reviews
+    """
+    decontaminated_data = container.data
+    flag = container.flags
+    report = container.report.content
+    root = Path(__file__).resolve().parents[1]
+    for date in decontaminated_data:
+        Path(root / "data/processed" / "clean" / date).mkdir(parents=True, exist_ok=True)
+        for file in ["listings", "calendar", "reviews"]:
+            decontaminated_data.loc[file, date].to_csv(root / "data/processed" / "clean" / date / f"{file}.csv")
+
+    for type in flag:
+        for file in flag[type]:
+            file_name = file.split("-")
+            name, date = file_name[0], "-".join(file_name[1:])
+            Path(root / "data/processed" / type / date).mkdir(parents=True, exist_ok=True)
+            flag[type][file].to_csv(root / "data/processed" / type / date / f"{name}.csv")
+            print(flag[type][file])
+
+    report.to_csv(root / "reports/qa_report.csv" )
+
+def loadConfig(value: str =None)->dict:
+    root = getRoot()
+
+    with open(root / "configs" / "florence.yaml", "r") as file:
+        config = yaml.safe_load(file)
+    return config if not value else config[value]
+
+def getRoot()->Path:
+    return Path(__file__).resolve().parents[1]
+
+
+cleaner = dataWashingMachine(findData())
+cleaner.cleanData()
+saveData(cleaner)

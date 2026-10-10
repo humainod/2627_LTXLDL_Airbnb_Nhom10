@@ -12,4 +12,7 @@ files:
 neccesary_values:
   kpi:  {"listings": ["price", "estimated_revenue_l365d"], "calendar": [], "reviews": []}
   llm: {"listings": [], "calendar": [], "reviews": []}
+force_outlier_threshold:
+  minimum_nights: [0, 365]
+
 
