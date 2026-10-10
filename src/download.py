@@ -102,7 +102,7 @@ def tai_file(url: str, save_path: Path) -> bool:
     
 
 
-def main():
+def main(config):
 
     # Bước 4: Tải lần lượt từng snapshot
     raw_dir = Path("data/raw")
