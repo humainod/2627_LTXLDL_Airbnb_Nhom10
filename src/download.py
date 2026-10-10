@@ -103,31 +103,6 @@ def tai_file(url: str, save_path: Path) -> bool:
 
 
 def main():
-    # Bước 1: Đọc tham số dòng lệnh
-    parser = argparse.ArgumentParser(description="Tải dữ liệu Airbnb thô.")
-    parser.add_argument(
-        "--config",
-        required=True,
-        help="Đường dẫn tới file cấu hình YAML",
-    )
-    args = parser.parse_args()
-
-    # Bước 2: Đọc file config
-    config_path = Path(args.config)
-    if not config_path.exists():
-        print(f"[LỖI] Không tìm thấy file config: {config_path}")
-        sys.exit(1)
-
-    with config_path.open("r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-
-    # Bước 3: Kiểm tra config có đủ thông tin chưa
-    if not config.get("city"):
-        print("[LỖI] Trường 'city' trong config đang trống.")
-        sys.exit(1)
-    if not config.get("snapshots") or config["snapshots"][0] == "":
-        print("[LỖI] Trường 'snapshots' trong config đang trống.")
-        sys.exit(1)
 
     # Bước 4: Tải lần lượt từng snapshot
     raw_dir = Path("data/raw")
@@ -147,4 +122,31 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
+    # Bước 1: Đọc tham số dòng lệnh
+    parser = argparse.ArgumentParser(description="Tải dữ liệu Airbnb thô.")
+    parser.add_argument(
+            "--config",
+            required=True,
+            help="Đường dẫn tới file cấu hình YAML",
+        )
+    args = parser.parse_args()
+
+# Bước 2: Đọc file config
+    config_path = Path(args.config)
+    if not config_path.exists():
+        print(f"[LỖI] Không tìm thấy file config: {config_path}")
+        sys.exit(1)
+
+    with config_path.open("r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+
+    # Bước 3: Kiểm tra config có đủ thông tin chưa
+    if not config.get("city"):
+        print("[LỖI] Trường 'city' trong config đang trống.")
+        sys.exit(1)
+    if not config.get("snapshots") or config["snapshots"][0] == "":
+        print("[LỖI] Trường 'snapshots' trong config đang trống.")
+        sys.exit(1)
+
     main()
+
