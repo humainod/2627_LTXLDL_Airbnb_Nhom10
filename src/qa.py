@@ -23,7 +23,7 @@ def findData()->pd.DataFrame:
     config = loadConfig()
 
     raw_data = pd.DataFrame(
-        {date: [pd.read_csv(root / "data/raw/" / config["city"] / date / file) for file in config["files"]] for date in config["snapshots"]},
+        {date: [pd.read_csv(root / "data/raw" / config["city"] / date / file) for file in config["files"]] for date in config["snapshots"]},
         index=["listings", "calendar", "reviews"]
         )
 
