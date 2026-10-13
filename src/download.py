@@ -148,5 +148,5 @@ if __name__ == "__main__":
         print("[LỖI] Trường 'snapshots' trong config đang trống.")
         sys.exit(1)
 
-    main()
+    main(config)
 
