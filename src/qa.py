@@ -197,6 +197,7 @@ class dataWashingMachine:
         print("Flagging")
         if callable(cond):
             for col in flag:
+                print(f"flasgging {col}, dtype={flag[col].dtype}")
                 if col in self.__important_for_kpi[name]:
                     flag[col]=flag[col].case_when([(cond(flag[col]), "Critical KPI value"), (default, "Clean")])
                 elif col in self.__important_for_llm[name]:
@@ -205,6 +206,7 @@ class dataWashingMachine:
                     flag[col]=flag[col].case_when([(cond(flag[col]), "Non-critical value"), (default, "Clean")])
         else:
             for col in flag:
+                print(f"flagging {col}, dtpe={flag[col].dtype}")
                 spec_cond = col if col in cond else "def"
                 if col in self.__important_for_kpi[name]:
                     flag[col]=flag[col].case_when([(cond[spec_cond](flag[col]), "Critical KPI value"), (default, "Clean")])
@@ -267,13 +269,15 @@ class dataWashingMachine:
             Data Frame
                 A board contains all the flags
         """
+        temp = data.copy()
         threshold = loadConfig("force_outlier_threshold")
         outlier = dict()
         for item in threshold:
             outlier[item] = lambda s: self.__outlierMark(s)|(s<threshold[item][0])|(s>threshold[item][1])
         outlier["def"]= self.__outlierMark
-        data = data.drop([col for col in data.columns if (data[col].dtype==object or data[col].dtype==str or data[col].dtype==bool) or re.findall("id", col)], axis=1)
-        return self.__baseFlagger(name, data, outlier)
+        temp = temp.drop([col for col in data.columns if (data[col].dtype=="object" or data[col].dtype=="str" or data[col].dtype=="bool") or re.findall("id", col)], axis=1)
+        print(f"Col to check for outlier: {list(temp.columns)}")
+        return self.__baseFlagger(name, temp, outlier)
 
     def __invalidFormatHandler(self, data: pd.DataFrame)->tuple[pd.DataFrame, int]:
         """
@@ -449,7 +453,7 @@ def getRoot()->Path:
 
 if __name__ == "__main__":
     config = loadConfig()
-    if not config["city"] or not config["snapshot"]:
+    if not config["city"] or not config["snapshots"]:
         pass
     else:
         raw_data = findData()
@@ -461,7 +465,14 @@ if __name__ == "__main__":
         print(cleaner.report.content)
         print("---MISSING---")
         for flag in cleaner.flags["missing"]:
-            name = flag.split()
+            name = flag.split("-")
+            print(f"{name[0]}, {"/".join(name[1:])}")
+            print(cleaner.flags["missing"][flag])
+        print("---OTULIER---")
+        for flag in cleaner.flags["outlier"]:
+            name = flag.split("-")
+            print(f"{name[0]}, {"/".join(name[1:])}")
+            print(cleaner.flags["outlier"][flag])
 
         
 
