@@ -466,12 +466,14 @@ if __name__ == "__main__":
         print("---MISSING---")
         for flag in cleaner.flags["missing"]:
             name = flag.split("-")
-            print(f"{name[0]}, {"/".join(name[1:])}")
+            print(name[0], end=", ")
+            print("/".join(name[1:]))
             print(cleaner.flags["missing"][flag])
         print("---OTULIER---")
         for flag in cleaner.flags["outlier"]:
             name = flag.split("-")
-            print(f"{name[0]}, {"/".join(name[1:])}")
+            print(name[0], end=", ")
+            print("/".join(name[1:]))
             print(cleaner.flags["outlier"][flag])
 
     
