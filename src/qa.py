@@ -23,7 +23,7 @@ def findData()->pd.DataFrame:
     config = loadConfig()
 
     raw_data = pd.DataFrame(
-        {date: [pd.read_csv(root / "data/raw/florence" / date / file) for file in config["files"]] for date in config["snapshots"]},
+        {date: [pd.read_csv(root / "data/raw/" / config["city"] / date / file) for file in config["files"]] for date in config["snapshots"]},
         index=["listings", "calendar", "reviews"]
         )
 
@@ -432,6 +432,9 @@ def saveData(container: dataWashingMachine):
     report.to_csv(root / "reports/qa_report.csv" )
 
 def loadConfig(value: str =None)->dict:
+    """
+    Get the config yaml file and return it
+    """
     root = getRoot()
 
     with open(root / "configs" / "florence.yaml", "r") as file:
@@ -439,7 +442,26 @@ def loadConfig(value: str =None)->dict:
     return config if not value else config[value]
 
 def getRoot()->Path:
+    """
+    Return project root's path
+    """
     return Path(__file__).resolve().parents[1]
 
+if __name__ == "__main__":
+    config = loadConfig()
+    if not config["city"] or not config["snapshot"]:
+        pass
+    else:
+        raw_data = findData()
+        print("Data found")
+        cleaner = dataWashingMachine(raw_data)
+        cleaner.cleanData()
+        print("Data cleansed")
+        print("---REPORT---")
+        print(cleaner.report.content)
+        print("---MISSING---")
+        for flag in cleaner.flags["missing"]:
+            name = flag.split()
 
+        
 
