@@ -16,3 +16,11 @@ force_outlier_threshold:
   minimum_nights: [0, 365]
 
 
+# Bổ sung cấu hình LLM vào cuối file configs/florence.yaml
+llm_config:
+  sample_size: 1000                    # Số lượng mẫu review bốc ngẫu nhiên để phân tích
+  cache_path: "data/processed/llm_cache.jsonl"
+  output_path: "data/processed/reviews_llm.csv"
+  aspects: ["vị trí", "sạch sẽ", "chủ nhà", "giá trị", "tiện nghi", "độ ồn", "an toàn"]
+
+
