@@ -7,6 +7,7 @@ import numpy as np
 import google.generativeai as genai
 import yaml
 from typing import Dict, List, Any
+from pathlib import Path
 
 def load_cache(cache_path: str) -> Dict[str, Dict[str, Any]]:
     """Tải bộ nhớ đệm đã phân tích từ trước để tránh tốn tiền API."""
@@ -112,14 +113,17 @@ def run_llm_pipeline(config_path: str, snapshot: str, skip_llm: bool = False) ->
         config = yaml.safe_load(f)
     
     # Khai báo đường dẫn theo đúng cấu trúc của nhóm
-    review_id_map_path = "data/id/review_id.csv"
-    raw_reviews_path = f"data/raw/florence/{snapshot}/reviews.csv.gz"
-    output_path = f"data/processed/reviews_llm_{snapshot}.csv"
+    base_dir = Path(__file__).resolve().parents[1]
+    city_name = config.get('city', 'florence')
     
-    if not os.path.exists(review_id_map_path):
+    review_id_map_path = base_dir / "data" / "id" / "review_id.csv"
+    raw_reviews_path = base_dir / "data" / "raw" / city_name / snapshot / "reviews.csv.gz"
+    output_path = base_dir / "data" / "processed" / f"reviews_llm_{snapshot}.csv"
+    
+    if not review_id_map_path.exists():
         print(f"❌ Lỗi: Không tìm thấy tệp ID mục tiêu tại {review_id_map_path}")
         return 0.0
-    if not os.path.exists(raw_reviews_path):
+    if not raw_reviews_path.exists():
         print(f"⚠️ Cảnh báo: Không tìm thấy dữ liệu thô tại {raw_reviews_path}. Bỏ qua mốc {snapshot}.")
         return 0.0
 
@@ -146,7 +150,7 @@ def run_llm_pipeline(config_path: str, snapshot: str, skip_llm: bool = False) ->
 
     # 2. Đọc tệp reviews thô và lọc ra các dòng khớp với tập ID mục tiêu
     print(f" Đang tải và trích lọc dữ liệu thô từ: {raw_reviews_path}")
-    df_raw = pd.read_csv(raw_reviews_path)
+    df_raw = pd.read_csv(raw_reviews_path, compression='gzip')
     df_raw = df_raw.dropna(subset=['comments'])
     df_raw['id'] = df_raw['id'].astype(str).str.strip()
     
@@ -158,7 +162,7 @@ def run_llm_pipeline(config_path: str, snapshot: str, skip_llm: bool = False) ->
         print(f" Không có ID mẫu nào thuộc mốc {snapshot}. Chuyển mốc tiếp theo.")
         return 0.0
 
-    cache = load_cache(cache_path)
+    cache = load_cache(str(base_dir / cache_path))
     print(f" Đã tải bộ nhớ đệm: Tìm thấy {len(cache)} mẫu đã phân tích trước đó.")
     
     model = setup_gemini_client()
@@ -182,7 +186,7 @@ def run_llm_pipeline(config_path: str, snapshot: str, skip_llm: bool = False) ->
         else:
             missing_items.append({'id': r_id, 'text': row['comments'], 'row_data': row})
 
-    # Đồng bộ kích thước lô 15 comments/request như     # === TIẾP TỤC ĐOẠN CODE LLM.PY TỪ BATCH_SIZE = 15 ===
+    # Đồng bộ kích thước lô 15 comments/request
     batch_size = 15
     total_missing = len(missing_items)
     
@@ -222,7 +226,7 @@ def run_llm_pipeline(config_path: str, snapshot: str, skip_llm: bool = False) ->
                 })
             
             # Lưu lưu trữ lô này ngay lập tức vào bộ nhớ đệm (Cache) để bảo toàn tiến độ
-            save_batch_to_cache(cache_path, cache_to_save)
+            save_batch_to_cache(str(base_dir / cache_path), cache_to_save)
             
             # Nghỉ 12 giây giữa các đợt gửi batch để kiểm soát tốt Rate Limit (RPM / TPM)
             if i + batch_size < total_missing:
@@ -259,27 +263,30 @@ def main():
     total_sample_run_cost = 0.0
     total_city_raw_rows = 0
     
+    base_dir = Path(__file__).resolve().parent.parent
+    city_name = config.get('city', 'florence')
+    
     for snapshot in all_snapshots:
         cost = run_llm_pipeline(config_path=args.config, snapshot=str(snapshot), skip_llm=args.skip_llm)
         total_sample_run_cost += cost
         
         # Đếm số lượng dòng thô thực tế để tính toán quy đổi chi phí ngoại suy
-        raw_reviews_path = f"data/raw/florence/{snapshot}/reviews.csv.gz"
-        if os.path.exists(raw_reviews_path):
+        raw_reviews_path = base_dir / "data" / "raw" / city_name / str(snapshot) / "reviews.csv.gz"
+        if raw_reviews_path.exists():
             try:
-                df_count = pd.read_csv(raw_reviews_path, usecols=['id'])
+                df_count = pd.read_csv(raw_reviews_path, compression='gzip', usecols=['id'])
                 total_city_raw_rows += len(df_count)
             except Exception:
                 continue
 
-    # Thuật toán tính toán ngoại suy chi phí tổng thể (Extrapolation) cho toàn bộ thành phố Florence
+    # Thuật toán tính toán ngoại suy chi phí tổng thể (Extrapolation) cho toàn bộ thành phố
     # Giả định trung bình 1 dòng ~ 1.5 token input + output quy đổi ra đơn giá Flash
     AVERAGE_UNIT_COST_USD = 0.0004
     estimated_total_city_cost = total_city_raw_rows * AVERAGE_UNIT_COST_USD
 
     print("\n====================  TỔNG KẾT CHI PHÍ LLM ====================")
     print(f" Chi phí API thực tế đã trả cho đợt chạy mẫu: ${total_sample_run_cost:.5f} USD")
-    print(f" Tổng số lượng review gốc toàn thành phố Florence (4 mốc): {total_city_raw_rows:,} dòng")
+    print(f" Tổng số lượng review gốc toàn thành phố {city_name.upper()} (4 mốc): {total_city_raw_rows:,} dòng")
     print(f" ƯỚC TÍNH CHI PHÍ NẾU XỬ LÝ TOÀN BỘ THÀNH PHỐ: ${estimated_total_city_cost:.2f} USD")
     print("=========================================================================")
 
