@@ -34,14 +34,17 @@ def calculate_snapshot_kpis(config: dict, snapshot: str):
     calendar_path = clean_dir / "calendar.csv"
     
     if not listings_path.exists() or not calendar_path.exists():
-        print(f"⚠️ Cảnh báo: Không tìm thấy dữ liệu clean tại {clean_dir}. Bỏ qua snapshot {snapshot}.")
+        print(f" Cảnh báo: Không tìm thấy dữ liệu clean tại {clean_dir}. Bỏ qua snapshot {snapshot}.")
         return
 
-    print(f"\n📊 --- ĐANG TÍNH TOÁN KPI CHO SNAPSHOT: {snapshot} (Thành phố: {city}) ---")
+    print(f"\n --- ĐANG TÍNH TOÁN KPI CHO SNAPSHOT: {snapshot} (Thành phố: {city}) ---")
     
     # 1. Đọc dữ liệu listings và calendar đã làm sạch từ qa.py
     df_listings = pd.read_csv(listings_path)
     df_calendar = pd.read_csv(calendar_path)
+    
+    # Xác định tên cột khóa chính của bảng listings (id hoặc listing_id)
+    id_col = 'id' if 'id' in df_listings.columns else 'listing_id'
     
     # 2. Xử lý trạng thái đặt phòng trên calendar (available: 't'/'f' hoặc True/False)
     if 'available' in df_calendar.columns:
@@ -51,15 +54,25 @@ def calculate_snapshot_kpis(config: dict, snapshot: str):
             df_calendar['is_booked'] = ~df_calendar['available']
     else:
         df_calendar['is_booked'] = False
-
-    # 3. Xử lý cột giá trên calendar
+    # 3. Xử lý cột giá trên calendar (đã được qa.py làm sạch)
     if 'price' in df_calendar.columns:
-        #if df_calendar['price'].dtype == object:
-        #    df_calendar['price_clean'] = df_calendar['price'].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False).astype(float)
-        #else:
-            df_calendar['price_clean'] = df_calendar['price']
+        df_calendar['price_clean'] = pd.to_numeric(df_calendar['price'], errors='coerce')
     else:
-        df_calendar['price_clean'] = 0.0
+        df_calendar['price_clean'] = np.nan
+
+    # Nếu calendar thiếu giá, lấy từ listings.csv sang
+    if df_calendar['price_clean'].isna().all() or df_calendar['price_clean'].sum() == 0:
+        if 'price' in df_listings.columns:
+            listing_price_map = df_listings.set_index(id_col)['price'].to_dict()
+            df_calendar['price_clean'] = df_calendar['listing_id'].map(listing_price_map)
+
+    # Đảm bảo chuyển đổi số an toàn, nếu vẫn có chỗ NaN/0 thì điền giá trung bình hoặc 1 giá trị mặc định (vd: 100)
+    df_calendar['price_clean'] = pd.to_numeric(df_calendar['price_clean'], errors='coerce')
+    mean_fallback_price = df_calendar['price_clean'].mean()
+    if pd.isna(mean_fallback_price) or mean_fallback_price == 0:
+        mean_fallback_price = 100.0  # Giá mặc định phòng hờ nếu dữ liệu hoàn toàn trống
+    
+    df_calendar['price_clean'] = df_calendar['price_clean'].fillna(mean_fallback_price)
 
     # Tính doanh thu từng ngày (nếu được đặt thì lấy giá, ngược lại bằng 0)
     df_calendar['revenue'] = np.where(df_calendar['is_booked'], df_calendar['price_clean'], 0.0)
@@ -68,19 +81,22 @@ def calculate_snapshot_kpis(config: dict, snapshot: str):
     calendar_agg = df_calendar.groupby('listing_id').agg(
         total_days=('date', 'count'),
         booked_days=('is_booked', 'sum'),
-        total_revenue=('revenue', 'sum'),
-        avg_booked_price=('price_clean', lambda x: x[df_calendar.loc[x.index, 'is_booked']].mean() if df_calendar.loc[x.index, 'is_booked'].sum() > 0 else 0)
+        total_revenue=('revenue', 'sum')
     ).reset_index()
 
-    # Tính các chỉ số KPI theo từng listing
+    # Tính các chỉ số KPI theo từng listing một cách an toàn (tránh chia cho 0 gây ra NaN)
     calendar_agg['occupancy_rate'] = calendar_agg['booked_days'] / calendar_agg['total_days'].replace(0, np.nan)
+    calendar_agg['occupancy_rate'] = calendar_agg['occupancy_rate'].fillna(0)
+
     calendar_agg['adr'] = calendar_agg['total_revenue'] / calendar_agg['booked_days'].replace(0, np.nan)
+    calendar_agg['adr'] = calendar_agg['adr'].fillna(0)
+
     calendar_agg['revpar'] = calendar_agg['total_revenue'] / calendar_agg['total_days'].replace(0, np.nan)
+    calendar_agg['revpar'] = calendar_agg['revpar'].fillna(0)
 
     # 5. Kết hợp (Merge) với bảng listings
     id_col = 'id' if 'id' in df_listings.columns else 'listing_id'
     df_merged = pd.merge(df_listings, calendar_agg, left_on=id_col, right_on='listing_id', how='left')
-
     # Điền giá trị 0 cho các listing không xuất hiện trong calendar
     for col in ['total_days', 'booked_days', 'total_revenue', 'occupancy_rate', 'adr', 'revpar']:
         if col in df_merged.columns:
@@ -96,10 +112,10 @@ def calculate_snapshot_kpis(config: dict, snapshot: str):
     
     output_path = output_dir / f"kpi_{snapshot}.csv"
     df_merged.to_csv(output_path, index=False, encoding='utf-8')
-    print(f"✅ THÀNH CÔNG: Đã xuất KPI chi tiết ra file: {output_path}")
-    
+    print(f" THÀNH CÔNG: Đã xuất KPI chi tiết ra file: {output_path}")
+
     # 7. In tổng kết nhanh (Summary)
-    print(f"📈 --- TỔNG KẾT NHANH SNAPSHOT {snapshot} ---")
+    print(f" --- TỔNG KẾT NHANH SNAPSHOT {snapshot} ---")
     print(f"  - Tổng số phòng (listings): {len(df_merged)}")
     print(f"  - Tỷ lệ lấp đầy trung bình: {df_merged['occupancy_rate'].mean() * 100:.2f}%")
     print(f"  - Giá thuê trung bình (ADR): ${df_merged['adr'].replace(0, np.nan).mean():.2f}")
@@ -148,7 +164,7 @@ def main():
     for snapshot in config["snapshots"]:
         calculate_snapshot_kpis(config, str(snapshot))
 
-    print("\n🎉 HOÀN THÀNH TOÀN BỘ CÁC MỐC SNAPSHOT CHO MODULE KPI!")
+    print("\n HOÀN THÀNH TOÀN BỘ CÁC MỐC SNAPSHOT CHO MODULE KPI!")
 
 if __name__ == "__main__":
     main()
