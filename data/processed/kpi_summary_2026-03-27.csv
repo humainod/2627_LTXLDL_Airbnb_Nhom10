@@ -1,2 +1,2 @@
-snapshot,total_listings,avg_occupancy_rate,avg_adr,avg_revpar,total_revenue
-2026-03-27,1000,0.40149041095890414,100.0,40.14904109589041,14654400.0
+snapshot,total_listings,avg_occupancy_rate,avg_adr,avg_revpar,total_revenue,avg_positive_sentiment_rate
+2026-03-27,1000,0.40149041095890414,100.0,40.14904109589041,14654400.0,0.0
