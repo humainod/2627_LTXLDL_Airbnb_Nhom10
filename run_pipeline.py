@@ -25,7 +25,7 @@ def run_step(command: list[str], step_name: str):
     Hàm hỗ trợ thực thi một lệnh trong terminal và kiểm tra lỗi.
     """
     print(f"\n==================================================")
-    print(f"🚀 BẮT ĐẦU BƯỚC: {step_name}")
+    print(f" BẮT ĐẦU BƯỚC: {step_name}")
     print(f"Lệnh chạy: {' '.join(command)}")
     print(f"==================================================")
     
@@ -56,7 +56,7 @@ def main():
         config = yaml.safe_load(f)
 
     city = config.get("city", "unknown")
-    print(f"🌟 BẮT ĐẦU CHẠY PIPELINE CHO THÀNH PHỐ: {city.upper()} 🌟")
+    print(f" BẮT ĐẦU CHẠY PIPELINE CHO THÀNH PHỐ: {city.upper()} ")
 
     # --- BƯỚC 1: Tải dữ liệu thô ---
     run_step([sys.executable, "src/download.py", "--config", str(config_path)], "1. Tải dữ liệu (Download)")
@@ -86,7 +86,7 @@ def main():
     if viz_script.exists():
         run_step([sys.executable, "src/viz.py", "--config", str(config_path)], "5. Vẽ biểu đồ trực quan (Visualization)")
 
-    print(f"\n🎉🎉 CHÚC MỪNG! TOÀN BỘ PIPELINE CHO {city.upper()} ĐÃ CHẠY XONG XUẤT SẮC! 🎉🎉")
+    print(f"\n CHÚC MỪNG! TOÀN BỘ PIPELINE CHO {city.upper()} ĐÃ CHẠY XONG XUẤT SẮC! ")
 
 if __name__ == "__main__":
     main()
