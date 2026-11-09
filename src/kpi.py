@@ -48,7 +48,7 @@ def calculate_snapshot_kpis(config: dict, snapshot: str):
     listing_id_path = id_dir / "listing_id.csv"
     
     if not listings_path.exists() or not calendar_path.exists():
-        print(f"⚠️ Cảnh báo: Không tìm thấy dữ liệu clean tại {clean_dir}. Bỏ qua snapshot {snapshot}.")
+        print(f" Cảnh báo: Không tìm thấy dữ liệu clean tại {clean_dir}. Bỏ qua snapshot {snapshot}.")
         return
 
     print(f"\n==================================================================")
