@@ -1,2 +1,2 @@
-snapshot,total_listings,avg_occupancy_rate,avg_adr,avg_revpar,total_revenue,avg_positive_sentiment_rate
-2025-12-26,1000,0.3287671232876712,100.0,32.87671232876713,12000000.0,0.0
+snapshot,total_listings_raw,total_listings_clean,outliers_removed,avg_occupancy_rate_raw,avg_occupancy_rate_clean,avg_adr_raw,avg_adr_clean,avg_revpar_raw,avg_revpar_clean,total_revenue_raw,total_revenue_clean,avg_positive_sentiment_raw,avg_positive_sentiment_clean
+2025-12-26,1000,1000,0,32.87671232876712,32.87671232876712,100.0,100.0,32.87671232876713,32.87671232876713,12000000.0,12000000.0,0.0,0.0
