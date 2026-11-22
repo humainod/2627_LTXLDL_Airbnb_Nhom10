@@ -1,2 +1,0 @@
-snapshot,total_listings_raw,total_listings_clean,outliers_removed,avg_occupancy_rate_raw,avg_occupancy_rate_clean,avg_adr_raw,avg_adr_clean,avg_revpar_raw,avg_revpar_clean,total_revenue_raw,total_revenue_clean,avg_positive_sentiment_raw,avg_positive_sentiment_clean
-2025-09-22,1000,927,73,36.248219178082195,36.479437277415734,227.1224303334856,161.62778544665747,76.92793362391033,58.1836437254578,28078695.772727273,19686726.772727273,0.0,0.0
