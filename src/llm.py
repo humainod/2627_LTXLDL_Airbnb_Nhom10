@@ -8,6 +8,9 @@ import google.generativeai as genai
 import yaml
 from typing import Dict, List, Any
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def load_cache(cache_path: str) -> Dict[str, Dict[str, Any]]:
     """Tải bộ nhớ đệm đã phân tích từ trước để tránh tốn tiền API."""
@@ -44,7 +47,7 @@ def setup_gemini_client() -> genai.GenerativeModel:
     }
     
     model = genai.GenerativeModel(
-        model_name="gemini-3.5-flash-lite",
+        model_name="gemini-2.5-flash-lite",
         generation_config=generation_config,
         system_instruction=(
             "Bạn là chuyên gia phân tích dữ liệu du lịch. Nhiệm vụ của bạn là nhận vào một mảng JSON chứa các đánh giá phòng Airbnb "
@@ -129,13 +132,9 @@ def run_llm_pipeline(config_path: str, snapshot: str, skip_llm: bool = False) ->
 
     print(f"\n --- TIẾN HÀNH XỬ LÝ SNAPSHOT: {snapshot} ---")
     
-    llm_cfg = config.get('llm_config', {})
-    cache_path = llm_cfg.get('cache_path', 'data/processed/llm_cache.jsonl')
+    llm_cfg = config.get('llm', config.get('llm_config', {}))
+    cache_path = llm_cfg.get('cache', llm_cfg.get('cache_path', 'data/processed/llm_cache.jsonl'))
     allowed_aspects = llm_cfg.get('aspects', ["vị trí", "sạch sẽ", "chủ nhà", "giá trị", "tiện nghi", "độ ồn", "an toàn"])
-    
-    if skip_llm:
-        print(f" Nhận cờ --skip-llm: Bỏ qua bước gọi API cho mốc {snapshot}.")
-        return 0.0
 
     # 1. Lọc các review_id được đánh dấu 'x' tại cột 'Mẫu LLM'
     print(f"🔍 Đang lọc review_id từ tệp chỉ định: {review_id_map_path}")
@@ -165,8 +164,6 @@ def run_llm_pipeline(config_path: str, snapshot: str, skip_llm: bool = False) ->
     cache = load_cache(str(base_dir / cache_path))
     print(f" Đã tải bộ nhớ đệm: Tìm thấy {len(cache)} mẫu đã phân tích trước đó.")
     
-    model = setup_gemini_client()
-    
     processed_records = []
     missing_items = []
     snapshot_api_cost = 0.0
@@ -191,53 +188,57 @@ def run_llm_pipeline(config_path: str, snapshot: str, skip_llm: bool = False) ->
     total_missing = len(missing_items)
     
     if total_missing > 0:
-        print(f" Đang gửi xử lý dữ liệu mới ({total_missing} dòng) theo lô Batch {batch_size}...")
-        
-        for i in range(0, total_missing, batch_size):
-            current_batch = missing_items[i : i + batch_size]
-            print(f" Đang xử lý lô từ dòng {i+1} đến {min(i + batch_size, total_missing)} / {total_missing}...")
+        if skip_llm:
+            print(f" Nhận cờ --skip-llm: Bỏ qua bước gọi API cho mốc {snapshot}.")
+        else:
+            model = setup_gemini_client()
+            print(f" Đang gửi xử lý dữ liệu mới ({total_missing} dòng) theo lô Batch {batch_size}...")
             
-            # Gửi cụm lô lên API kèm cơ chế retry thông minh (Exponential Backoff)
-            batch_analyses, cost = analyze_batch_with_retry(model, current_batch, allowed_aspects)
-            snapshot_api_cost += cost
-            
-            cache_to_save = []
-            for item in current_batch:
-                r_id = item['id']
-                row = item['row_data']
+            for i in range(0, total_missing, batch_size):
+                current_batch = missing_items[i : i + batch_size]
+                print(f" Đang xử lý lô từ dòng {i+1} đến {min(i + batch_size, total_missing)} / {total_missing}...")
                 
-                # Nếu API lỗi hoặc thiếu ID, gán giá trị mặc định tránh sập luồng
-                analysis = batch_analyses.get(r_id, {
-                    "sentiment": "mixed", "language": "unknown", "praised_aspects": [], "criticized_aspects": []
-                })
+                # Gửi cụm lô lên API kèm cơ chế retry thông minh (Exponential Backoff)
+                batch_analyses, cost = analyze_batch_with_retry(model, current_batch, allowed_aspects)
+                snapshot_api_cost += cost
                 
-                cache_to_save.append({'review_id': r_id, 'analysis': analysis})
+                cache_to_save = []
+                for item in current_batch:
+                    r_id = item['id']
+                    row = item['row_data']
+                    
+                    # Nếu API lỗi hoặc thiếu ID, gán giá trị mặc định tránh sập luồng
+                    analysis = batch_analyses.get(r_id, {
+                        "sentiment": "mixed", "language": "unknown", "praised_aspects": [], "criticized_aspects": []
+                    })
+                    
+                    cache_to_save.append({'review_id': r_id, 'analysis': analysis})
+                    
+                    processed_records.append({
+                        'review_id': r_id,
+                        'listing_id': row['listing_id'],
+                        'date': row['date'],
+                        'reviewer_name': row.get('reviewer_name', ''),
+                        'comments': item['text'],
+                        'llm_sentiment': analysis.get('sentiment', 'mixed'),
+                        'llm_language': analysis.get('language', 'unknown'),
+                        'llm_praised_aspects': ",".join(analysis.get('praised_aspects', [])) if isinstance(analysis.get('praised_aspects'), list) else "",
+                        'llm_criticized_aspects': ",".join(analysis.get('criticized_aspects', [])) if isinstance(analysis.get('criticized_aspects'), list) else ""
+                    })
                 
-                processed_records.append({
-                    'review_id': r_id,
-                    'listing_id': row['listing_id'],
-                    'date': row['date'],
-                    'reviewer_name': row.get('reviewer_name', ''),
-                    'comments': item['text'],
-                    'llm_sentiment': analysis.get('sentiment', 'mixed'),
-                    'llm_language': analysis.get('language', 'unknown'),
-                    'llm_praised_aspects': ",".join(analysis.get('praised_aspects', [])) if isinstance(analysis.get('praised_aspects'), list) else "",
-                    'llm_criticized_aspects': ",".join(analysis.get('criticized_aspects', [])) if isinstance(analysis.get('criticized_aspects'), list) else ""
-                })
-            
-            # Lưu lưu trữ lô này ngay lập tức vào bộ nhớ đệm (Cache) để bảo toàn tiến độ
-            save_batch_to_cache(str(base_dir / cache_path), cache_to_save)
-            
-            # Nghỉ 12 giây giữa các đợt gửi batch để kiểm soát tốt Rate Limit (RPM / TPM)
-            if i + batch_size < total_missing:
-                time.sleep(12)
+                # Lưu lưu trữ lô này ngay lập tức vào bộ nhớ đệm (Cache) để bảo toàn tiến độ
+                save_batch_to_cache(str(base_dir / cache_path), cache_to_save)
+                
+                # Nghỉ 12 giây giữa các đợt gửi batch để kiểm soát tốt Rate Limit (RPM / TPM)
+                if i + batch_size < total_missing:
+                    time.sleep(12)
                 
     # Xuất file kết quả sau phân tích ra thư mục dữ liệu đã xử lý
     df_output = pd.DataFrame(processed_records)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     df_output.to_csv(output_path, index=False, encoding='utf-8')
     print(f"✅ THÀNH CÔNG: Đã xuất kết quả cấu trúc ra: {output_path}")
-    if total_missing > 0:
+    if total_missing > 0 and not skip_llm:
         print(f" Chi phí gọi API thật cho đợt bốc mẫu này: ${snapshot_api_cost:.5f} USD")
         
     return snapshot_api_cost
