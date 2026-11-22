@@ -475,6 +475,7 @@ if __name__ == "__main__":
             print(name[0], end=", ")
             print("/".join(name[1:]))
             print(cleaner.flags["outlier"][flag])
+        saveData(cleaner)
 
     
 
