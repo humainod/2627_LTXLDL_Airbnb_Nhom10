@@ -16,7 +16,7 @@ Detail: Nhờ AI gợi ý cách lưu cache dạng JSONL để không bị mất 
 
 ---
 
-## 2. Prompt then chốt (5-10): bước nào, vào tệp nào
+## 2. Prompt then chốt
 
 Prompt 1: Bước làm sạch dữ liệu -> Tệp src/qa.py
 Nội dung: Viết các hàm bằng Pandas để chuyển cột giá tiền dạng chuỗi có dấu $ sang số thực, lọc ngày tháng bị sai định dạng và gắn cờ các dòng bị thiếu dữ liệu hoặc ngoại lai theo phương pháp IQR thay vì xóa bỏ.
@@ -38,7 +38,7 @@ Nội dung: Dùng matplotlib vẽ bản đồ phân bố tọa độ các phòng
 
 ---
 
-## 3. AI sai ở đâu (ví dụ thật)
+## 3. AI đã sai ở đâu
 
 AI: GitHub Copilot
 Usage: Fix bug hàm findData() trong tệp src/qa.py.

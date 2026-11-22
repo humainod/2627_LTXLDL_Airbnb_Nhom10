@@ -38,7 +38,7 @@ GEMINI_API_KEY
 Lưu api key của bạn vào trong file .env với tên biến như trên
 
 ```shell
-GEMINI_API_KEY = <API KEY>
+GEMINI_API_KEY = "API KEY"
 ```
 
 # Where to change city, snapshots

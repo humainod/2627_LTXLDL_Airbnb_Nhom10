@@ -55,7 +55,7 @@ def load_config(config_path: Path) -> dict:
 def classify_review(text: str) -> tuple:
     """Phân loại 1 review dựa trên từ điển có sẵn"""
     if pd.isna(text):
-        return "neutral", "", ""
+        return "mixed", "", ""
 
     # 1. Làm sạch và tách từ
     text_str = str(text).lower()
@@ -63,7 +63,7 @@ def classify_review(text: str) -> tuple:
     words = text_clean.split()
     
     if not words:
-        return "neutral", "", ""
+        return "mixed", "", ""
 
     pos_count = 0
     neg_count = 0
@@ -92,7 +92,7 @@ def classify_review(text: str) -> tuple:
 
     # 3. Xác định cảm xúc tổng quát
     if pos_count == 0 and neg_count == 0:
-        sentiment = "neutral"
+        sentiment = "mixed"
     elif pos_count > 0 and neg_count > 0:
         sentiment = "mixed"
     elif pos_count > neg_count:
