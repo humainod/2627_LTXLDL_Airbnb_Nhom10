@@ -13,6 +13,7 @@ Cách chạy:
 
 import argparse
 import sys
+import time
 from pathlib import Path
 import requests
 import yaml
@@ -43,6 +44,9 @@ def tai_snapshot(config: dict, snapshot: str, raw_dir: Path) -> bool:
         ok = tai_file(url, save_path)
         if not ok:
             tat_ca_ok = False
+        else:
+            # Nghỉ 2 giây sau mỗi file tải thành công
+            time.sleep(2)
     return tat_ca_ok
 
 def tai_file(url: str, save_path: Path) -> bool:
@@ -60,14 +64,23 @@ def tai_file(url: str, save_path: Path) -> bool:
 
     # Bước 3: Gửi request tải file
     print(f"  [tải] {url}")
-    try:
-        r = requests.get(url, timeout=60)
-    except requests.exceptions.Timeout:
-        print(f"  [LỖI] Hết thời gian chờ (timeout) khi tải: {url}")
-        return False
-    except requests.exceptions.ConnectionError:
-        print(f"  [LỖI] Không kết nối được tới server: {url}")
-        return False
+    r = None
+    for lan_thu in range(1, 4):
+        try:
+            r = requests.get(url, timeout=60)
+        except requests.exceptions.Timeout:
+            print(f"  [LỖI] Hết thời gian chờ (timeout) khi tải: {url}")
+            return False
+        except requests.exceptions.ConnectionError:
+            print(f"  [LỖI] Không kết nối được tới server: {url}")
+            return False
+
+        # Nếu bị chặn 403 thì đợi 10 giây rồi thử lại
+        if r.status_code == 403 and lan_thu < 3:
+            print(f"  [chờ] Bị chặn (403), đợi 10 giây rồi thử lại lần {lan_thu + 1}...")
+            time.sleep(10)
+            continue
+        break
 
     # Bước 4: Kiểm tra mã trạng thái HTTP
     if r.status_code == 404:
@@ -112,6 +125,8 @@ def main(config):
         ok = tai_snapshot(config, snapshot, raw_dir)
         if not ok:
             tat_ca_ok = False
+        # Nghỉ 5 giây giữa các snapshot
+        time.sleep(5)
 
     # Bước 5: Tổng kết
     print("\n=== Kết quả ===")
@@ -144,9 +159,8 @@ if __name__ == "__main__":
     if not config.get("city"):
         print("[LỖI] Trường 'city' trong config đang trống.")
         sys.exit(1)
-    if not config.get("snapshots") or config["snapshots"][0] == "":
+    if not config.get("snapshots") or config["snapshots"] == "":
         print("[LỖI] Trường 'snapshots' trong config đang trống.")
         sys.exit(1)
 
     main(config)
-
