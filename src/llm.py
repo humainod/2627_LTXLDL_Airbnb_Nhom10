@@ -47,7 +47,7 @@ def setup_gemini_client() -> genai.GenerativeModel:
     }
     
     model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash-lite",
+        model_name="gemini-3.5-flash-lite",
         generation_config=generation_config,
         system_instruction=(
             "Bạn là chuyên gia phân tích dữ liệu du lịch. Nhiệm vụ của bạn là nhận vào một mảng JSON chứa các đánh giá phòng Airbnb "
@@ -69,12 +69,12 @@ def setup_gemini_client() -> genai.GenerativeModel:
 def calculate_token_cost(prompt_text: str, response_text: str = None) -> float:
     """Tính toán chi phí dựa trên số lượng từ quy đổi xấp xỉ sang mã tokens (1 từ ~ 1.5 tokens)."""
     input_tokens = len(prompt_text.split()) * 1.5
-    cost_input = (input_tokens / 1_000_000) * 0.75
+    cost_input = (input_tokens / 1_000_000) * 0.30
     
     cost_output = 0.0
     if response_text:
         output_tokens = len(response_text.split()) * 1.5
-        cost_output = (output_tokens / 1_000_000) * 3.75
+        cost_output = (output_tokens / 1_000_000) * 2.50
         
     return cost_input + cost_output
 
