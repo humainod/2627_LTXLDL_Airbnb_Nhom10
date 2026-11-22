@@ -62,7 +62,7 @@ def main():
     run_step([sys.executable, "src/download.py", "--config", str(config_path)], "1. Tải dữ liệu (Download)")
 
     # --- BƯỚC 2: Kiểm tra và làm sạch dữ liệu ---
-    # (Lưu ý: qa.py của nhóm bạn thường đọc config trực tiếp hoặc qua code nội bộ)
+    # (Lưu ý: qa.py thường đọc config trực tiếp hoặc qua code nội bộ)
     run_step([sys.executable, "src/qa.py"], "2. Kiểm tra & Làm sạch (QA & Data Cleaning)")
 
     # --- BƯỚC 3a: Gọi LLM phân tích cảm xúc reviews ---

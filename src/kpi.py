@@ -15,6 +15,7 @@ Cách chạy:
 """
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -60,6 +61,14 @@ def calculate_snapshot_kpis(config: dict, snapshot: str):
     df_calendar = pd.read_csv(calendar_path)
     
     id_col = 'id' if 'id' in df_listings.columns else 'listing_id'
+
+    # Lấy sẵn danh sách ID ngoại lai từ qa.py (nếu có) để đồng bộ tiêu chí QA - KPI
+    qa_outlier_path = Path("data/processed/outlier") / snapshot / "listings.csv"
+    qa_outlier_ids = set()
+    if qa_outlier_path.exists():
+        df_qa_out = pd.read_csv(qa_outlier_path)
+        if 'price' in df_qa_out.columns and len(df_qa_out) == len(df_listings):
+            qa_outlier_ids = set(df_listings.loc[df_qa_out['price'] != 'Clean', id_col])
     
     # --- YÊU CẦU TRONG ẢNH: LỌC THEO DANH SÁCH ID VÀ GẮN CỘT analysis_area ---
     if listing_id_path.exists():
@@ -93,52 +102,110 @@ def calculate_snapshot_kpis(config: dict, snapshot: str):
     else:
         df_calendar['is_booked'] = False
 
-    # 3. Xử lý giá tiền
+    # 3. Xử lý giá tiền (Sửa lỗi 1: hỗ trợ cả $ và €, bù theo từng căn hộ, nội suy từ mốc liền kề thay vì ép 100.0)
     if 'price' in df_calendar.columns:
-        df_calendar['price_clean'] = pd.to_numeric(df_calendar['price'].astype(str).str.replace('$', '').str.replace(',', ''), errors='coerce')
+        df_calendar['price_clean'] = pd.to_numeric(
+            df_calendar['price'].astype(str).str.replace(r'[$€,]', '', regex=True), errors='coerce'
+        )
     else:
         df_calendar['price_clean'] = np.nan
 
-    if df_calendar['price_clean'].isna().all() or df_calendar['price_clean'].sum() == 0:
-        if 'price' in df_listings.columns:
-            price_clean_listings = pd.to_numeric(df_listings['price'].astype(str).str.replace('$', '').str.replace(',', ''), errors='coerce')
-            listing_price_map = dict(zip(df_listings[id_col], price_clean_listings))
-            df_calendar['price_clean'] = df_calendar['listing_id'].map(listing_price_map)
+    if 'price' in df_listings.columns:
+        price_clean_listings = pd.to_numeric(
+            df_listings['price'].astype(str).str.replace(r'[$€,]', '', regex=True), errors='coerce'
+        )
+        listing_price_map = dict(zip(df_listings[id_col], price_clean_listings))
+        df_calendar['price_clean'] = df_calendar['price_clean'].fillna(
+            df_calendar['listing_id'].map(listing_price_map)
+        )
 
-    # Dự phòng giá trung bình
-    mean_fallback = df_calendar['price_clean'].mean()
-    if pd.isna(mean_fallback) or mean_fallback == 0:
-        mean_fallback = 100.0
-    df_calendar['price_clean'] = df_calendar['price_clean'].fillna(mean_fallback)
+    # Nếu cả mốc bị khuyết toàn bộ cột giá (12/2025, 03/2026), tra cứu giá của chính listing_id từ mốc liền kề
+    if df_calendar['price_clean'].isna().all():
+        clean_root = Path("data/processed/clean")
+        all_snaps = [str(s) for s in config.get("snapshots", [])]
+        other_snaps = [s for s in all_snaps if s != snapshot]
+        if snapshot in all_snaps:
+            cur_idx = all_snaps.index(snapshot)
+            other_snaps.sort(key=lambda s: abs(all_snaps.index(s) - cur_idx))
+        cross_price_map = {}
+        for snap in other_snaps:
+            other_file = clean_root / snap / "listings.csv"
+            if other_file.exists():
+                df_other = pd.read_csv(other_file)
+                if 'price' in df_other.columns:
+                    oid_col = 'id' if 'id' in df_other.columns else 'listing_id'
+                    p_num = pd.to_numeric(
+                        df_other['price'].astype(str).str.replace(r'[$€,]', '', regex=True), errors='coerce'
+                    )
+                    for lid, val in zip(df_other[oid_col], p_num):
+                        if pd.notna(val) and lid not in cross_price_map:
+                            cross_price_map[lid] = val
+        if cross_price_map:
+            df_calendar['price_clean'] = df_calendar['listing_id'].map(cross_price_map)
 
-    # Tính doanh thu từng ngày
-    df_calendar['revenue'] = np.where(df_calendar['is_booked'], df_calendar['price_clean'], 0.0)
+    # Tính doanh thu từng ngày (giữ NaN nếu ngày đặt bị khuyết giá)
+    df_calendar['revenue'] = np.where(
+        df_calendar['is_booked'],
+        df_calendar['price_clean'],
+        np.where(df_calendar['price_clean'].notna(), 0.0, np.nan)
+    )
 
     # 4. Gom nhóm calendar theo từng listing
     calendar_agg = df_calendar.groupby('listing_id').agg(
         total_days=('date', 'count'),
         booked_days=('is_booked', 'sum'),
-        total_revenue=('revenue', 'sum')
+        total_revenue=('revenue', lambda s: s.sum(min_count=1))
     ).reset_index()
 
     # Tính KPI cấp listing
     calendar_agg['occupancy_rate'] = (calendar_agg['booked_days'] / calendar_agg['total_days'].replace(0, np.nan)).fillna(0)
-    calendar_agg['adr'] = (calendar_agg['total_revenue'] / calendar_agg['booked_days'].replace(0, np.nan)).fillna(0)
-    calendar_agg['revpar'] = (calendar_agg['total_revenue'] / calendar_agg['total_days'].replace(0, np.nan)).fillna(0)
+    calendar_agg['adr'] = calendar_agg['total_revenue'] / calendar_agg['booked_days'].replace(0, np.nan)
+    calendar_agg['revpar'] = calendar_agg['total_revenue'] / calendar_agg['total_days'].replace(0, np.nan)
 
-    # 5. Tích hợp kết quả LLM sentiment (nếu có)
+    # 5. Tích hợp kết quả LLM sentiment (Sửa lỗi 2: tự khôi phục từ cache nếu thiếu file reviews_llm)
+    df_llm = pd.DataFrame()
     if llm_review_path.exists():
         print(f" Đã tìm thấy dữ liệu LLM: {llm_review_path.name}. Đang tích hợp...")
         df_llm = pd.read_csv(llm_review_path)
-        if 'llm_sentiment' in df_llm.columns:
-            df_llm['is_positive'] = (df_llm['llm_sentiment'] == 'positive').astype(int)
-            llm_agg = df_llm.groupby('listing_id').agg(
-                total_reviews_analyzed=('review_id', 'count'),
-                positive_sentiment_count=('is_positive', 'sum')
-            ).reset_index()
-            llm_agg['positive_sentiment_rate'] = llm_agg['positive_sentiment_count'] / llm_agg['total_reviews_analyzed']
-        else:
-            llm_agg = pd.DataFrame(columns=['listing_id', 'positive_sentiment_rate'])
+
+    if df_llm.empty or 'listing_id' not in df_llm.columns or 'llm_sentiment' not in df_llm.columns:
+        cache_path = processed_dir / "llm_cache.jsonl"
+        review_id_map_path = id_dir / "review_id.csv"
+        if cache_path.exists() and review_id_map_path.exists():
+            cache_rows = []
+            with cache_path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        try:
+                            item = json.loads(line)
+                            cache_rows.append({
+                                'review_id_str': str(item['review_id']).strip(),
+                                'llm_sentiment': item.get('analysis', {}).get('sentiment', '')
+                            })
+                        except Exception:
+                            continue
+            if cache_rows:
+                df_cache = pd.DataFrame(cache_rows)
+                df_map = pd.read_csv(review_id_map_path)
+                df_map['review_id_str'] = df_map['review_id'].astype(str).str.strip()
+                df_llm = pd.merge(df_map[['review_id', 'review_id_str', 'listing_id']], df_cache, on='review_id_str', how='inner')
+                clean_rev_path = clean_dir / "reviews.csv"
+                if clean_rev_path.exists():
+                    df_rev_snap = pd.read_csv(clean_rev_path)
+                    rcol = 'id' if 'id' in df_rev_snap.columns else 'review_id'
+                    snap_rids = set(df_rev_snap[rcol].astype(str).str.strip())
+                    if snap_rids:
+                        df_llm = df_llm[df_llm['review_id_str'].isin(snap_rids)]
+
+    if not df_llm.empty and 'llm_sentiment' in df_llm.columns and 'listing_id' in df_llm.columns:
+        df_llm['listing_id'] = pd.to_numeric(df_llm['listing_id'], errors='coerce') if pd.api.types.is_numeric_dtype(df_listings[id_col]) else df_llm['listing_id'].astype(str).str.strip()
+        df_llm['is_positive'] = (df_llm['llm_sentiment'].astype(str).str.strip().str.lower() == 'positive').astype(int)
+        count_col = 'review_id' if 'review_id' in df_llm.columns else 'is_positive'
+        llm_agg = df_llm.groupby('listing_id').agg(
+            total_reviews_analyzed=(count_col, 'count'),
+            positive_sentiment_count=('is_positive', 'sum')
+        ).reset_index()
+        llm_agg['positive_sentiment_rate'] = llm_agg['positive_sentiment_count'] / llm_agg['total_reviews_analyzed']
     else:
         llm_agg = pd.DataFrame(columns=['listing_id', 'positive_sentiment_rate'])
 
@@ -147,20 +214,24 @@ def calculate_snapshot_kpis(config: dict, snapshot: str):
     if not llm_agg.empty and 'listing_id' in llm_agg.columns:
         df_merged = pd.merge(df_merged, llm_agg, left_on=id_col, right_on='listing_id', how='left')
     
-    for col in ['total_days', 'booked_days', 'total_revenue', 'occupancy_rate', 'adr', 'revpar', 'positive_sentiment_rate']:
+    # Giữ NaN cho positive_sentiment_rate để không ép căn không có review về 0%
+    for col in ['total_days', 'booked_days', 'occupancy_rate']:
         if col in df_merged.columns:
             df_merged[col] = df_merged[col].fillna(0)
 
-    # --- 7. TÍNH TOÁN THÊM GIÁ TRỊ SAU KHI LỌC NGOẠI LAI (OUTLIERS) ---
-    valid_adr_mask = df_merged['adr'] > 0
-    non_zero_adr_df = df_merged[valid_adr_mask]
-    
-    if not non_zero_adr_df.empty:
-        non_outlier_mask = remove_outliers_iqr(non_zero_adr_df, 'adr')
-        valid_listing_ids = set(non_zero_adr_df[non_outlier_mask][id_col])
-        df_merged['is_outlier_adr'] = df_merged[id_col].apply(lambda x: x in set(non_zero_adr_df[~non_outlier_mask][id_col]))
+    # --- 7. TÍNH TOÁN THÊM GIÁ TRỊ SAU KHI LỌC NGOẠI LAI (Sửa lỗi 4: đồng bộ với qa.py) ---
+    if qa_outlier_ids:
+        df_merged['is_outlier_adr'] = df_merged[id_col].isin(qa_outlier_ids)
     else:
-        df_merged['is_outlier_adr'] = False
+        valid_adr_mask = df_merged['adr'].notna() & (df_merged['adr'] > 0)
+        non_zero_adr_df = df_merged[valid_adr_mask]
+        
+        if not non_zero_adr_df.empty:
+            non_outlier_mask = remove_outliers_iqr(non_zero_adr_df, 'adr')
+            valid_listing_ids = set(non_zero_adr_df[non_outlier_mask][id_col])
+            df_merged['is_outlier_adr'] = df_merged[id_col].apply(lambda x: x in set(non_zero_adr_df[~non_outlier_mask][id_col]))
+        else:
+            df_merged['is_outlier_adr'] = False
 
     df_clean = df_merged[~df_merged['is_outlier_adr']].copy()
     num_outliers = df_merged['is_outlier_adr'].sum()
@@ -204,8 +275,8 @@ def calculate_snapshot_kpis(config: dict, snapshot: str):
     tot_rev_raw = df_merged['total_revenue'].sum()
     tot_rev_clean = df_clean['total_revenue'].sum()
 
-    avg_sent_raw = df_merged['positive_sentiment_rate'].mean() * 100 if 'positive_sentiment_rate' in df_merged.columns else 0.0
-    avg_sent_clean = df_clean['positive_sentiment_rate'].mean() * 100 if 'positive_sentiment_rate' in df_clean.columns else 0.0
+    avg_sent_raw = df_merged['positive_sentiment_rate'].dropna().mean() * 100 if 'positive_sentiment_rate' in df_merged.columns else 0.0
+    avg_sent_clean = df_clean['positive_sentiment_rate'].dropna().mean() * 100 if 'positive_sentiment_rate' in df_clean.columns else 0.0
 
     print(f"\n ==================== TỔNG KẾT KPI SNAPSHOT {snapshot} ====================")
     print(f"   Tổng số Listing: {len(df_merged)} (Loại bỏ {num_outliers} ngoại lai -> Còn lại: {len(df_clean)})")
