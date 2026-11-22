@@ -124,10 +124,10 @@ def run_llm_pipeline(config_path: str, snapshot: str, skip_llm: bool = False) ->
     output_path = base_dir / "data" / "processed" / f"reviews_llm_{snapshot}.csv"
     
     if not review_id_map_path.exists():
-        print(f"❌ Lỗi: Không tìm thấy tệp ID mục tiêu tại {review_id_map_path}")
+        print(f" Lỗi: Không tìm thấy tệp ID mục tiêu tại {review_id_map_path}")
         return 0.0
     if not raw_reviews_path.exists():
-        print(f"⚠️ Cảnh báo: Không tìm thấy dữ liệu thô tại {raw_reviews_path}. Bỏ qua mốc {snapshot}.")
+        print(f" Cảnh báo: Không tìm thấy dữ liệu thô tại {raw_reviews_path}. Bỏ qua mốc {snapshot}.")
         return 0.0
 
     print(f"\n --- TIẾN HÀNH XỬ LÝ SNAPSHOT: {snapshot} ---")
@@ -137,7 +137,7 @@ def run_llm_pipeline(config_path: str, snapshot: str, skip_llm: bool = False) ->
     allowed_aspects = llm_cfg.get('aspects', ["vị trí", "sạch sẽ", "chủ nhà", "giá trị", "tiện nghi", "độ ồn", "an toàn"])
 
     # 1. Lọc các review_id được đánh dấu 'x' tại cột 'Mẫu LLM'
-    print(f"🔍 Đang lọc review_id từ tệp chỉ định: {review_id_map_path}")
+    print(f" Đang lọc review_id từ tệp chỉ định: {review_id_map_path}")
     df_map = pd.read_csv(review_id_map_path)
     
     # Ép kiểu và loại bỏ khoảng trắng để lọc chính xác
@@ -237,7 +237,7 @@ def run_llm_pipeline(config_path: str, snapshot: str, skip_llm: bool = False) ->
     df_output = pd.DataFrame(processed_records)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     df_output.to_csv(output_path, index=False, encoding='utf-8')
-    print(f"✅ THÀNH CÔNG: Đã xuất kết quả cấu trúc ra: {output_path}")
+    print(f" THÀNH CÔNG: Đã xuất kết quả cấu trúc ra: {output_path}")
     if total_missing > 0 and not skip_llm:
         print(f" Chi phí gọi API thật cho đợt bốc mẫu này: ${snapshot_api_cost:.5f} USD")
         
