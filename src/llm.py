@@ -44,7 +44,7 @@ def setup_gemini_client() -> genai.GenerativeModel:
     }
     
     model = genai.GenerativeModel(
-        model_name="gemini-3.8-flash",
+        model_name="gemini-3.5-flash-lite",
         generation_config=generation_config,
         system_instruction=(
             "Bạn là chuyên gia phân tích dữ liệu du lịch. Nhiệm vụ của bạn là nhận vào một mảng JSON chứa các đánh giá phòng Airbnb "
