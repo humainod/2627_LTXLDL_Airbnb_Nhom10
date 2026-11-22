@@ -37,4 +37,6 @@ GEMINI_API_KEY
 
 Save your api key in .env with the name above
 
+# Where to change city, snapshots
 
+You can find it in the configs folder, there should be a file name florence.yaml
